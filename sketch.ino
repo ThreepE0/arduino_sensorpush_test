@@ -1,28 +1,51 @@
+/**
+ * A BLE client example that is rich in capabilities.
+ * There is a lot new capabilities implemented.
+ * author unknown
+ * updated by chegewara
+ */
+
 #include "BLEDevice.h"
 //#include "BLEScan.h"
 
-// The remote service we wish to connect to.
-static BLEUUID serviceUUID("EF090000-11D6-42BA-93B8-9DD7EC090AB0");
-// The characteristic of the remote service we are interested in.
-static BLEUUID macUUID("EF09000D-11D6-42BA-93B8-9DD7EC090AA9");
-static BLEUUID batUUID("EF090007-11D6-42BA-93B8-9DD7EC090AA9");
-static BLEUUID tempUUID("EF090080-11D6-42BA-93B8-9DD7EC090AA9");
-static BLEUUID humUUID("EF090081-11D6-42BA-93B8-9DD7EC090AA9");
-static BLEUUID barUUID("EF090082-11D6-42BA-93B8-9DD7EC090AA9");
+// UUIDs
+struct SensorUUIDs {
+    static const BLEUUID service;
+    static const BLEUUID mac;
+    static const BLEUUID bat;
+    static const BLEUUID temp;
+    static const BLEUUID hum;
+    static const BLEUUID bar;
+};
+
+const BLEUUID SensorUUIDs::service("EF090000-11D6-42BA-93B8-9DD7EC090AB0");
+const BLEUUID SensorUUIDs::mac("EF09000D-11D6-42BA-93B8-9DD7EC090AA9");
+const BLEUUID SensorUUIDs::bat("EF090007-11D6-42BA-93B8-9DD7EC090AA9");
+const BLEUUID SensorUUIDs::temp("EF090080-11D6-42BA-93B8-9DD7EC090AA9");
+const BLEUUID SensorUUIDs::hum("EF090081-11D6-42BA-93B8-9DD7EC090AA9");
+const BLEUUID SensorUUIDs::bar("EF090082-11D6-42BA-93B8-9DD7EC090AA9");
+
+// Characteristics
+struct SensorCharacteristics {
+  //6 byte int8[6]
+  static BLERemoteCharacteristic* mac;
+  //4 byte int16[2]
+  static BLERemoteCharacteristic* bat;
+  //4 byte int32
+  static BLERemoteCharacteristic* temp;
+  //4 byte int32
+  static BLERemoteCharacteristic* hum;
+  //4 byte int32
+  static BLERemoteCharacteristic* bar;
+};
+
+SensorCharacteristics sensorChars;
+
 
 static boolean doConnect = false;
 static boolean connected = false;
 static boolean doScan = false;
-//6 byte int8[6]
-static BLERemoteCharacteristic* macCharacteristic;
-//4 byte int16[2]
-static BLERemoteCharacteristic* batCharacteristic;
-//4 byte int32
-static BLERemoteCharacteristic* tempCharacteristic;
-//4 byte int32
-static BLERemoteCharacteristic* humCharacteristic;
-//4 byte int32
-static BLERemoteCharacteristic* barCharacteristic;
+
 static BLEAdvertisedDevice* myDevice;
 
 static void notifyCallback(
@@ -64,10 +87,10 @@ bool connectToServer() {
     pClient->setMTU(517); //set client to request maximum MTU from server (default is 23 otherwise)
   
     // Obtain a reference to the service we are after in the remote BLE server.
-    BLERemoteService* pRemoteService = pClient->getService(serviceUUID);
+    BLERemoteService* pRemoteService = pClient->getService(SensorUUIDs::service);
     if (pRemoteService == nullptr) {
       Serial.print("Failed to find our service UUID: ");
-      Serial.println(serviceUUID.toString().c_str());
+      Serial.println(SensorUUIDs::service.toString().c_str());
       pClient->disconnect();
       return false;
     }
@@ -75,37 +98,22 @@ bool connectToServer() {
 
 
     // Obtain a reference to the characteristic in the service of the remote BLE server.
-    macCharacteristic = pRemoteService->getCharacteristic(macUUID);
-    batCharacteristic = pRemoteService->getCharacteristic(batUUID);
-    tempCharacteristic = pRemoteService->getCharacteristic(tempUUID);
-    humCharacteristic = pRemoteService->getCharacteristic(humUUID);
-    barCharacteristic = pRemoteService->getCharacteristic(barUUID);
-    if (tempCharacteristic == nullptr) {
+    sensorChars.mac = pRemoteService->getCharacteristic(SensorUUIDs::mac);
+    sensorChars.bat = pRemoteService->getCharacteristic(SensorUUIDs::bat);
+    sensorChars.temp = pRemoteService->getCharacteristic(SensorUUIDs::temp);
+    sensorChars.hum = pRemoteService->getCharacteristic(SensorUUIDs::hum);
+    sensorChars.bar = pRemoteService->getCharacteristic(SensorUUIDs::bar);
+    
+    if (sensorChars.temp == nullptr) {
       Serial.print("Failed to find our characteristic UUID: ");
-      Serial.println(tempUUID.toString().c_str());
+      Serial.println(SensorUUIDs::temp.toString().c_str());
       pClient->disconnect();
       return false;
     }
     Serial.println(" - Found our characteristic");
 
-    // Read the value of the temp characteristic.
-    if(tempCharacteristic->canRead()) {
-      std::string temp = tempCharacteristic->readValue();
-      Serial.print("temperature: ");
-      printInt32Value(temp);
-    }
-
-    // Read the value of the temp characteristic.
-    if(humCharacteristic->canRead()) {
-      std::string temp = humCharacteristic->readValue();
-      Serial.print("humidity: ");
-      printInt32Value(temp);
-    }
-
-
-
-    if(tempCharacteristic->canNotify())
-      tempCharacteristic->registerForNotify(notifyCallback);
+    if(sensorChars.temp->canNotify())
+      sensorChars.temp->registerForNotify(notifyCallback);
 
     connected = true;
     return true;
@@ -122,7 +130,7 @@ class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
     Serial.println(advertisedDevice.toString().c_str());
 
     // We have found a device, let us now see if it contains the service we are looking for.
-    if (advertisedDevice.haveServiceUUID() && advertisedDevice.isAdvertisingService(serviceUUID)) {
+    if (advertisedDevice.haveServiceUUID() && advertisedDevice.isAdvertisingService(SensorUUIDs::service)) {
 
       BLEDevice::getScan()->stop();
       myDevice = new BLEAdvertisedDevice(advertisedDevice);
@@ -206,9 +214,9 @@ void loop() {
     int32_t newValue = 0x01000000;
     uint8_t byteArray[sizeof(int32_t)];
     memcpy(byteArray, &newValue, sizeof(int32_t));
-    tempCharacteristic->writeValue(byteArray, sizeof(int32_t));
-    humCharacteristic->writeValue(byteArray, sizeof(int32_t));
-    barCharacteristic->writeValue(byteArray, sizeof(int32_t));
+    sensorChars.temp->writeValue(byteArray, sizeof(int32_t));
+    sensorChars.hum->writeValue(byteArray, sizeof(int32_t));
+    sensorChars.bar->writeValue(byteArray, sizeof(int32_t));
     delay(150);
 
 
@@ -216,10 +224,10 @@ void loop() {
     //Serial.print("mac: ");
     //printMacAddress(mac);
 
-    std::string temp = tempCharacteristic->readValue();
-    std::string humidity = humCharacteristic->readValue();
-    std::string pressure = barCharacteristic->readValue();
-    std::string bat = batCharacteristic->readValue();
+    std::string temp = sensorChars.temp->readValue();
+    std::string humidity = sensorChars.hum->readValue();
+    std::string pressure = sensorChars.bar->readValue();
+    std::string bat = sensorChars.bat->readValue();
 
        Serial.print("temp: ");
        printInt32Value(temp);

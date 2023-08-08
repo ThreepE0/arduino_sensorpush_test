@@ -98,9 +98,17 @@ class SensorPush : public PollingComponent {
     // Read the characteristics
     //std::string macValue = getMacAddress( pMacCharacteristic->readValue() );
     //std::string batValue = pBatCharacteristic->readValue();
-    std::string temp = pTempCharacteristic->readValue();
-    int16_t tempValue;
-    memcpy(&tempValue, temp.data(), sizeof(int16_t));
+    std::string rawTemp = pTempCharacteristic->readValue();
+    int32_t tempIntValue = 0;
+    if (rawTemp.size() >= sizeof(int32_t)) {
+        memcpy(&tempIntValue, rawTemp.data(), sizeof(int32_t));
+    }
+
+    for (size_t i = 0; i < rawTemp.size(); i++) {
+        ESP_LOGD("SensorPush", "Byte %d: 0x%02X", i, rawTemp[i]);
+    }
+
+    std::string tempValueStr = std::to_string(tempIntValue);
 
     //std::string humValue = pHumCharacteristic->readValue();
     //std::string barValue = pBarCharacteristic->readValue();
@@ -118,11 +126,11 @@ class SensorPush : public PollingComponent {
     //memcpy(&rateValue, rate.data(), sizeof(int16_t));
 
 
-    ESP_LOGD("SensorPush", "Temperature Value: %f", String(tempValue));  // Log the value
+    ESP_LOGD("SensorPush", "Temperature Value: %f", tempValueStr.c_str());  // Log the value
     // Convert and update ESPHome sensors
     //mac_sensor->publish_state(macValue);
     //battery_sensor->publish_state(std::stof(batValue));
-    temperature_sensor->publish_state(temp);
+    temperature_sensor->publish_state(rawTemp);
     //humidity_sensor->publish_state(std::stof(humValue));
     //pressure_sensor->publish_state(std::stof(barValue));
     //led_sensor->publish_state(std::stof(ledValue));

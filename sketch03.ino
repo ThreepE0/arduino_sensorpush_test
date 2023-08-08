@@ -8,6 +8,8 @@
 #include "BLEDevice.h"
 //#include "BLEScan.h"
 
+//10 second interval//
+const unsigned long WAIT_PERIOD_MS = 60000;
 
 //const char* targetMacAddress = "A4:34:F1:7F:9B:8B";// Replace with your MAC address or set to nullptr if you want to scan.
 //const char* targetMacAddress = "A4:34:F1:7F:DA:DD"; // Replace with your MAC address or set to nullptr if you want to scan.
@@ -205,16 +207,19 @@ void printInt32Value(const std::string& value) {
     Serial.println(intValue);
   } else {
     Serial.println("Invalid int32 value length!");
+    Serial.println(value.length());
   }
 }
 
+//print the first value if two exists (battery for example//
 void printInt16Value(const std::string& value) {
-  if (value.length() == 4) {
+  if (value.length() == 2 || value.length() == 4) {
     int16_t intValue;
     memcpy(&intValue, value.data(), sizeof(int16_t));
     Serial.println(intValue);
   } else {
     Serial.println("Invalid int16 value length!");
+    Serial.println(value.length());
   }
 }
 
@@ -225,7 +230,8 @@ void printInt8Value(const std::string& value) {
     memcpy(&intValue, value.data(), sizeof(int8_t));
     Serial.println(intValue);
   } else {
-    Serial.println("Invalid int8 value length!");
+     Serial.print("Invalid int8 value length: ");
+     Serial.println(value.length());
   }
 }
 
@@ -235,11 +241,24 @@ void printMacAddress(const std::string& value) {
     sprintf(macAddress, "%02X:%02X:%02X:%02X:%02X:%02X",
             value[5], value[4], value[3], value[2], value[1], value[0]);
 
-    Serial.println(macAddress);
+    Serial.print(macAddress);
   } else {
-    Serial.println("Invalid MAC address length!");
+    Serial.print("Invalid MAC address length!");
   }
 }
+
+String getMacAddress(const std::string& value) {
+  if (value.length() == 6) {
+    char macAddress[18]; // Buffer for the MAC address string (including null-terminator).
+    sprintf(macAddress, "%02X:%02X:%02X:%02X:%02X:%02X",
+            value[5], value[4], value[3], value[2], value[1], value[0]);
+
+    return String(macAddress);
+  } else {
+    return "invalid mac";
+  }
+}
+
 
 // This is the Arduino main loop function.
 void loop() {
@@ -252,6 +271,13 @@ void loop() {
                 int32_t newValue = 0x01000000;
                 uint8_t byteArray[sizeof(int32_t)];
                 memcpy(byteArray, &newValue, sizeof(int32_t));
+
+                int8_t ledblink = 0x02;
+                uint8_t ledByteArray[sizeof(int8_t)];
+                memcpy(ledByteArray, &ledblink, sizeof(int32_t));
+                sensorChars.led->writeValue(ledByteArray, sizeof(int8_t));
+                
+
                 sensorChars.temp->writeValue(byteArray, sizeof(int32_t));
                 sensorChars.hum->writeValue(byteArray, sizeof(int32_t));
                 sensorChars.bar->writeValue(byteArray, sizeof(int32_t));
@@ -265,26 +291,28 @@ void loop() {
                 std::string led = sensorChars.led->readValue();
                 std::string rate = sensorChars.rate->readValue();
 
-                Serial.print("mac: ");
-                printMacAddress(mac);
-
-                Serial.print("temp: ");
-                printInt32Value(temp);
-
-                Serial.print("humidity: ");
-                printInt32Value(humidity);
-
-                Serial.print("pressure: ");
-                printInt32Value(pressure);      
-
-                Serial.print("battery: ");
-                printInt16Value(bat);  
-
-                Serial.print("led: ");
-                printInt8Value(led);  
-
-                Serial.print("rate: ");
-                printInt8Value(rate);  
+                // Convert the std::string values to their respective data types
+                int16_t tempValue, humidityValue, pressureValue, batValue, ledValue, rateValue;
+                memcpy(&tempValue, temp.data(), sizeof(int16_t));
+                memcpy(&humidityValue, humidity.data(), sizeof(int16_t));
+                memcpy(&pressureValue, pressure.data(), sizeof(int16_t));
+                memcpy(&batValue, bat.data(), sizeof(int16_t));
+                memcpy(&ledValue, led.data(), sizeof(int16_t));
+                memcpy(&rateValue, rate.data(), sizeof(int16_t));
+                
+                // Construct the JSON string
+                String jsonData = "{";
+                jsonData += "\"mac\":\"" + getMacAddress(mac) + "\",";
+                jsonData += "\"temp\":" + String(tempValue) + ",";
+                jsonData += "\"humidity\":" + String(humidityValue) + ",";
+                jsonData += "\"pressure\":" + String(pressureValue) + ",";
+                jsonData += "\"battery\":" + String(batValue) + ",";
+                jsonData += "\"led\":" + String(ledValue) + ",";  
+                jsonData += "\"rate\":" + String(rateValue);                            
+                jsonData += "}";
+                
+                // Print the JSON string
+                Serial.println(jsonData);
 
                 // After collecting data, disconnect
                 pClient->disconnect();
@@ -296,9 +324,9 @@ void loop() {
                 Serial.println("We have failed to connect to the server; there is nothing more we will do.");
             }
     }
-    delay(500);
+    delay(100);
     if(currentSensorIndex + 1 == numSensors){
       Serial.println("waiting...");
-      delay(20000); // Delay between loops.
+      delay(WAIT_PERIOD_MS); // Delay between loops.
     }
 }

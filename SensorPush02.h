@@ -109,6 +109,7 @@ class SensorPush : public PollingComponent {
     }
 
     std::string tempValueStr = std::to_string(tempIntValue);
+    ESP_LOGD("SensorPush", "Temperature Value dddd: %f", tempIntValue);
 
     //std::string humValue = pHumCharacteristic->readValue();
     //std::string barValue = pBarCharacteristic->readValue();
